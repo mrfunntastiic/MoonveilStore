@@ -1,28 +1,35 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import { Layout } from "@/components/layout/Layout";
+
+// Pages
+import Dashboard from "@/pages/dashboard";
+import BotPage from "@/pages/bot";
+import KategoriPage from "@/pages/kategori";
+import ProdukPage from "@/pages/produk";
+import PesananPage from "@/pages/pesanan";
+import PesananDetailPage from "@/pages/pesanan/[id]";
+import PelangganPage from "@/pages/pelanggan";
 
 const queryClient = new QueryClient();
 
-function Home() {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Replit Agent is building...</h1>
-        <p className="mt-2 text-sm text-gray-600">Your app will appear here once it's ready.</p>
-      </div>
-    </div>
-  );
-}
-
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route component={NotFound} />
-    </Switch>
+    <Layout>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/bot" component={BotPage} />
+        <Route path="/kategori" component={KategoriPage} />
+        <Route path="/produk" component={ProdukPage} />
+        <Route path="/pesanan" component={PesananPage} />
+        <Route path="/pesanan/:id" component={PesananDetailPage} />
+        <Route path="/pelanggan" component={PelangganPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
   );
 }
 
@@ -40,3 +47,4 @@ function App() {
 }
 
 export default App;
+

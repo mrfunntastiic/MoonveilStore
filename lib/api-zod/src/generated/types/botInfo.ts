@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface BotInfo {
+  username?: string | null;
+  firstName?: string | null;
+  connected: boolean;
+  link?: string | null;
 }

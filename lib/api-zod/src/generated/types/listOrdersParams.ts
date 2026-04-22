@@ -5,7 +5,8 @@
  * Telegram Store Bot Admin API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListOrdersStatus } from "./listOrdersStatus";
 
-export interface HealthStatus {
-  status: string;
-}
+export type ListOrdersParams = {
+  status?: ListOrdersStatus;
+};

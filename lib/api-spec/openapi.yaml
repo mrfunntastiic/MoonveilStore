@@ -3,20 +3,31 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Telegram Store Bot Admin API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: categories
+    description: Product category management
+  - name: products
+    description: Product catalog management
+  - name: orders
+    description: Customer order management
+  - name: customers
+    description: Customer management
+  - name: dashboard
+    description: Dashboard summaries and analytics
+  - name: bot
+    description: Bot configuration and broadcast
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +35,304 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard KPI summary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/sales-trend:
+    get:
+      operationId: getSalesTrend
+      tags: [dashboard]
+      summary: Get last 14 days sales trend
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesTrendPoint"
+
+  /dashboard/top-products:
+    get:
+      operationId: getTopProducts
+      tags: [dashboard]
+      summary: Get top selling products
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopProduct"
+
+  /dashboard/recent-orders:
+    get:
+      operationId: getRecentOrders
+      tags: [dashboard]
+      summary: Get most recent orders
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    patch:
+      operationId: updateCategory
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      responses:
+        "204":
+          description: Deleted
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: categoryId
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getProduct
+      tags: [products]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      responses:
+        "204":
+          description: Deleted
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, paid, processing, shipped, completed, cancelled]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /orders/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getOrder
+      tags: [orders]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+    patch:
+      operationId: updateOrderStatus
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+
+  /bot/info:
+    get:
+      operationId: getBotInfo
+      tags: [bot]
+      summary: Get bot status and config
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotInfo"
+
+  /bot/broadcast:
+    post:
+      operationId: broadcastMessage
+      tags: [bot]
+      summary: Send a broadcast message to all customers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BroadcastInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BroadcastResult"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +340,262 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        emoji:
+          type: string
+          nullable: true
+        productCount:
+          type: integer
+      required: [id, name, productCount]
+
+    CategoryInput:
+      type: object
+      properties:
+        name:
+          type: string
+        emoji:
+          type: string
+          nullable: true
+      required: [name]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        categoryId:
+          type: integer
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+        priceCents:
+          type: integer
+          description: Price in cents (IDR rupiah)
+        imageUrl:
+          type: string
+          nullable: true
+        stock:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, description, priceCents, stock, active, createdAt]
+
+    ProductInput:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+        priceCents:
+          type: integer
+        imageUrl:
+          type: string
+          nullable: true
+        stock:
+          type: integer
+        active:
+          type: boolean
+      required: [name, description, priceCents, stock, active]
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        telegramId:
+          type: string
+        username:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        orderCount:
+          type: integer
+        totalSpentCents:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, telegramId, orderCount, totalSpentCents, createdAt]
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPriceCents:
+          type: integer
+        subtotalCents:
+          type: integer
+      required: [id, productId, productName, quantity, unitPriceCents, subtotalCents]
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        orderCode:
+          type: string
+        customerId:
+          type: integer
+        customerName:
+          type: string
+          nullable: true
+        customerTelegramId:
+          type: string
+        status:
+          type: string
+          enum: [pending, paid, processing, shipped, completed, cancelled]
+        totalCents:
+          type: integer
+        itemCount:
+          type: integer
+        shippingAddress:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, orderCode, customerId, customerTelegramId, status, totalCents, itemCount, createdAt, updatedAt]
+
+    OrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderItem"
+          required: [items]
+
+    OrderStatusInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, paid, processing, shipped, completed, cancelled]
+        notes:
+          type: string
+          nullable: true
+      required: [status]
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalRevenueCents:
+          type: integer
+        totalOrders:
+          type: integer
+        pendingOrders:
+          type: integer
+        totalCustomers:
+          type: integer
+        totalProducts:
+          type: integer
+        activeProducts:
+          type: integer
+        revenueTodayCents:
+          type: integer
+        ordersToday:
+          type: integer
+      required: [totalRevenueCents, totalOrders, pendingOrders, totalCustomers, totalProducts, activeProducts, revenueTodayCents, ordersToday]
+
+    SalesTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        revenueCents:
+          type: integer
+        orders:
+          type: integer
+      required: [date, revenueCents, orders]
+
+    TopProduct:
+      type: object
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        unitsSold:
+          type: integer
+        revenueCents:
+          type: integer
+      required: [productId, productName, unitsSold, revenueCents]
+
+    BotInfo:
+      type: object
+      properties:
+        username:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        connected:
+          type: boolean
+        link:
+          type: string
+          nullable: true
+      required: [connected]
+
+    BroadcastInput:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    BroadcastResult:
+      type: object
+      properties:
+        sent:
+          type: integer
+        failed:
+          type: integer
+      required: [sent, failed]
