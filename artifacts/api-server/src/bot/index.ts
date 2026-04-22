@@ -1,4 +1,6 @@
-import { Bot, InlineKeyboard, session, type Context, type SessionFlavor } from "grammy";
+import { Bot, InlineKeyboard, InputFile, session, type Context, type SessionFlavor } from "grammy";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import { db } from "@workspace/db";
 import {
   customersTable,
@@ -524,22 +526,26 @@ export async function startTelegramBot(): Promise<void> {
     const label = labels[method] ?? method;
     await finishOrder(ctx, label);
     if (method === "qris") {
-      const qrisImage = process.env["QRIS_IMAGE_URL"];
       const qrisCaption =
-        "📱 *Pembayaran QRIS*\n\n" +
+        "📱 *Pembayaran QRIS \\- Moonveil Creations*\n\n" +
         "Scan QR di atas dengan aplikasi e\\-wallet \\(GoPay, OVO, Dana, ShopeePay, dll\\) atau mobile banking\\.\n\n" +
-        "Setelah bayar, kirim bukti transfer ke admin\\. Produk akan dikirim setelah pembayaran terkonfirmasi\\.";
-      if (qrisImage) {
-        try {
-          await ctx.replyWithPhoto(qrisImage, { caption: qrisCaption, parse_mode: "MarkdownV2" });
-        } catch {
+        "Setelah bayar, kirim *bukti transfer* ke chat ini\\. Produk akan dikirim setelah pembayaran terkonfirmasi admin\\.";
+      const localQris = path.join(process.cwd(), "assets", "qris.png");
+      const envQris = process.env["QRIS_IMAGE_URL"];
+      try {
+        if (envQris) {
+          await ctx.replyWithPhoto(envQris, { caption: qrisCaption, parse_mode: "MarkdownV2" });
+        } else if (existsSync(localQris)) {
+          await ctx.replyWithPhoto(new InputFile(localQris), {
+            caption: qrisCaption,
+            parse_mode: "MarkdownV2",
+          });
+        } else {
           await ctx.reply(qrisCaption, { parse_mode: "MarkdownV2" });
         }
-      } else {
-        await ctx.reply(
-          "📱 *Pembayaran QRIS*\n\nAdmin akan mengirimkan QR code QRIS untuk pembayaran\\. Mohon tunggu\\.",
-          { parse_mode: "MarkdownV2" },
-        );
+      } catch (e) {
+        logger.warn({ e }, "failed to send QRIS image");
+        await ctx.reply(qrisCaption, { parse_mode: "MarkdownV2" });
       }
     }
   });
