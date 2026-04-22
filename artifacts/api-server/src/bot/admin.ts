@@ -243,10 +243,10 @@ async function saveDeliveryFile(
   ctx.session.awaitingFileForOrderId = undefined;
   ctx.session.step = "idle";
   await ctx.reply(
-    `✅ File tersimpan untuk pesanan ini\\. Tekan *Kirim File ke Pembeli* untuk mengirim\\.`,
+    `✅ File tersimpan\\. Mengirim ke pembeli & menandai pesanan selesai\\.\\.\\.`,
     { parse_mode: "MarkdownV2" },
   );
-  await showAdminOrderDetail(ctx, orderId);
+  await sendDeliveryFile(ctx, orderId);
 }
 
 async function sendDeliveryFile(ctx: AdminCtx, orderId: number) {
