@@ -409,6 +409,46 @@ async function showLowStock(ctx: AdminCtx) {
   });
 }
 
+export async function forwardPaymentProofToAdmins(
+  bot: Bot<AdminCtx>,
+  fromChatId: number,
+  messageId: number,
+  customerName: string,
+  customerUsername: string | null,
+  order: { id: number; orderCode: string; totalCents: number; status: string } | null,
+): Promise<void> {
+  if (adminIds.size === 0) return;
+  let header = `💸 *BUKTI PEMBAYARAN MASUK*\n\n`;
+  header += `Dari: ${escapeMd(customerName)}`;
+  if (customerUsername) header += ` \\(@${escapeMd(customerUsername)}\\)`;
+  header += `\n`;
+  if (order) {
+    header += `Pesanan: \`${escapeMd(order.orderCode)}\`\n`;
+    header += `Total: *${escapeMd(formatRupiah(order.totalCents))}*\n`;
+    header += `Status: ${escapeMd(statusLabel(order.status))}`;
+  } else {
+    header += `_Tidak ada pesanan pending dari pelanggan ini\\._`;
+  }
+  const kb = new InlineKeyboard();
+  if (order) {
+    kb.text("📋 Lihat Pesanan", `adm:o:${order.id}`).row();
+    if (order.status === "pending") {
+      kb.text("✅ Tandai Dibayar", `adm:s:${order.id}:paid`).row();
+    }
+  }
+  for (const adminId of adminIds) {
+    try {
+      await bot.api.sendMessage(adminId, header, {
+        parse_mode: "MarkdownV2",
+        reply_markup: kb,
+      });
+      await bot.api.forwardMessage(adminId, fromChatId, messageId);
+    } catch (e) {
+      logger.warn({ e, adminId }, "failed to forward payment proof to admin");
+    }
+  }
+}
+
 export async function notifyNewOrder(bot: Bot<AdminCtx>, orderId: number): Promise<void> {
   if (adminIds.size === 0) return;
   const rows = await db

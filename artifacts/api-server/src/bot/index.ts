@@ -13,7 +13,7 @@ import {
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { formatRupiah, generateOrderCode, statusLabel } from "../lib/format";
-import { registerAdminHandlers, notifyNewOrder } from "./admin";
+import { registerAdminHandlers, notifyNewOrder, forwardPaymentProofToAdmins, isAdmin } from "./admin";
 import { clearNav, sendNav, sendNavPhoto, tryDeleteIncoming, type NavSession } from "./nav";
 
 interface SessionData extends NavSession {
@@ -551,6 +551,51 @@ export async function startTelegramBot(): Promise<void> {
         await ctx.reply(qrisCaption, { parse_mode: "MarkdownV2" });
       }
     }
+  });
+
+  bot.on(["message:photo", "message:document", "message:video"], async (ctx, next) => {
+    if (isAdmin(ctx.from?.id)) {
+      await next();
+      return;
+    }
+    const cust = await ensureCustomer(ctx);
+    if (!cust) return;
+    const recent = await db
+      .select({
+        id: ordersTable.id,
+        orderCode: ordersTable.orderCode,
+        totalCents: ordersTable.totalCents,
+        status: ordersTable.status,
+      })
+      .from(ordersTable)
+      .where(
+        and(
+          eq(ordersTable.customerId, cust.id),
+          sql`${ordersTable.status} in ('pending','paid','processing')`,
+        ),
+      )
+      .orderBy(desc(ordersTable.createdAt))
+      .limit(1);
+    const order = recent[0] ?? null;
+    const name = [cust.firstName, cust.lastName].filter(Boolean).join(" ") || "Pelanggan";
+    try {
+      await forwardPaymentProofToAdmins(
+        botInstance!,
+        ctx.chat!.id,
+        ctx.message!.message_id,
+        name,
+        cust.username ?? null,
+        order,
+      );
+    } catch (e) {
+      logger.warn({ e }, "failed to forward payment proof");
+    }
+    await ctx.reply(
+      order
+        ? `✅ Bukti pembayaran untuk pesanan ${order.orderCode} sudah diterima. Admin akan segera memverifikasi. Terima kasih!`
+        : "✅ Terima kasih! Bukti sudah diterima admin.",
+      { reply_markup: new InlineKeyboard().text("📦 Pesanan Saya", "orders").text("« Menu", "menu") },
+    );
   });
 
   bot.on("message:text", async (ctx) => {
