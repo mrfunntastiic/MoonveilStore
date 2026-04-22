@@ -16,6 +16,7 @@ interface SessionData {
   step: "idle" | "awaiting_address" | "awaiting_phone" | "awaiting_payment_method";
   draftAddress?: string;
   draftPhone?: string;
+  productMessageIds: number[];
 }
 
 type BotCtx = Context & SessionFlavor<SessionData>;
@@ -113,7 +114,20 @@ async function showCategories(ctx: BotCtx) {
   await ctx.reply("Pilih kategori:", { reply_markup: kb });
 }
 
+async function clearProductMessages(ctx: BotCtx) {
+  const ids = ctx.session.productMessageIds ?? [];
+  for (const id of ids) {
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, id);
+    } catch (e) {
+      logger.debug({ e, id }, "failed to delete product message");
+    }
+  }
+  ctx.session.productMessageIds = [];
+}
+
 async function showProducts(ctx: BotCtx, categoryId: number | "all") {
+  await clearProductMessages(ctx);
   const where =
     categoryId === "all"
       ? eq(productsTable.active, true)
@@ -125,12 +139,14 @@ async function showProducts(ctx: BotCtx, categoryId: number | "all") {
     .orderBy(desc(productsTable.createdAt))
     .limit(20);
   if (items.length === 0) {
-    await ctx.reply("Belum ada produk di kategori ini.", {
+    const m = await ctx.reply("Belum ada produk di kategori ini.", {
       reply_markup: new InlineKeyboard().text("« Kategori", "catalog"),
     });
+    ctx.session.productMessageIds.push(m.message_id);
     return;
   }
-  await ctx.reply(`Menampilkan ${items.length} produk:`);
+  const header = await ctx.reply(`Menampilkan ${items.length} produk:`);
+  ctx.session.productMessageIds.push(header.message_id);
   for (const p of items) {
     const stockLine = p.stock > 0 ? `Stok: ${p.stock}` : "⚠️ Stok habis";
     const caption = `*${escapeMd(p.name)}*\n${escapeMd(p.description || "")}\n\n💰 ${escapeMd(
@@ -140,25 +156,29 @@ async function showProducts(ctx: BotCtx, categoryId: number | "all") {
     if (p.stock > 0) {
       kb.text("➕ Tambah ke Keranjang", `add:${p.id}`);
     }
+    let sent;
     if (p.imageUrl) {
       try {
-        await ctx.replyWithPhoto(p.imageUrl, {
+        sent = await ctx.replyWithPhoto(p.imageUrl, {
           caption,
           parse_mode: "MarkdownV2",
           reply_markup: kb,
         });
+        ctx.session.productMessageIds.push(sent.message_id);
         continue;
       } catch (e) {
         logger.warn({ e, productId: p.id }, "failed to send photo, falling back to text");
       }
     }
-    await ctx.reply(caption, { parse_mode: "MarkdownV2", reply_markup: kb });
+    sent = await ctx.reply(caption, { parse_mode: "MarkdownV2", reply_markup: kb });
+    ctx.session.productMessageIds.push(sent.message_id);
   }
-  await ctx.reply("Pilih lagi atau kembali:", {
+  const footer = await ctx.reply("Pilih lagi atau kembali:", {
     reply_markup: new InlineKeyboard()
       .text("« Kategori", "catalog")
       .text("🛒 Keranjang", "cart"),
   });
+  ctx.session.productMessageIds.push(footer.message_id);
 }
 
 function escapeMd(s: string): string {
@@ -414,7 +434,7 @@ export async function startTelegramBot(): Promise<void> {
 
   bot.use(
     session({
-      initial: (): SessionData => ({ step: "idle" }),
+      initial: (): SessionData => ({ step: "idle", productMessageIds: [] }),
     }),
   );
 
