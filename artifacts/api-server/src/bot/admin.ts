@@ -260,6 +260,7 @@ async function sendDeliveryFile(ctx: AdminCtx, orderId: number) {
       deliveryFileType: ordersTable.deliveryFileType,
       deliveryFileName: ordersTable.deliveryFileName,
       deliveryCaption: ordersTable.deliveryCaption,
+      statusMessageId: ordersTable.statusMessageId,
     })
     .from(ordersTable)
     .where(eq(ordersTable.id, orderId))
@@ -283,17 +284,28 @@ async function sendDeliveryFile(ctx: AdminCtx, orderId: number) {
     return;
   }
   const chatId = Number(cust[0]!.telegramId);
+  if (o.statusMessageId) {
+    try {
+      await ctx.api.deleteMessage(chatId, o.statusMessageId);
+    } catch {
+      /* ignore */
+    }
+  }
   const caption =
-    `📦 Pesanan ${o.orderCode}\n\n` +
+    `📦 Pesanan ${o.orderCode} - ✅ Selesai\n\n` +
     `Berikut file pesanan kamu. Terima kasih sudah belanja!` +
     (o.deliveryCaption ? `\n\n${o.deliveryCaption}` : "");
+  let sentMessageId: number | null = null;
   try {
     if (o.deliveryFileType === "document") {
-      await ctx.api.sendDocument(chatId, o.deliveryFileId, { caption });
+      const m = await ctx.api.sendDocument(chatId, o.deliveryFileId, { caption });
+      sentMessageId = m.message_id;
     } else if (o.deliveryFileType === "photo") {
-      await ctx.api.sendPhoto(chatId, o.deliveryFileId, { caption });
+      const m = await ctx.api.sendPhoto(chatId, o.deliveryFileId, { caption });
+      sentMessageId = m.message_id;
     } else if (o.deliveryFileType === "video") {
-      await ctx.api.sendVideo(chatId, o.deliveryFileId, { caption });
+      const m = await ctx.api.sendVideo(chatId, o.deliveryFileId, { caption });
+      sentMessageId = m.message_id;
     }
   } catch (e) {
     logger.warn({ e, orderId }, "failed to send delivery file to customer");
@@ -303,21 +315,25 @@ async function sendDeliveryFile(ctx: AdminCtx, orderId: number) {
   const newStatus = o.status === "cancelled" ? o.status : "completed";
   await db
     .update(ordersTable)
-    .set({ deliverySentAt: new Date(), status: newStatus, updatedAt: new Date() })
+    .set({
+      deliverySentAt: new Date(),
+      status: newStatus,
+      statusMessageId: sentMessageId,
+      updatedAt: new Date(),
+    })
     .where(eq(ordersTable.id, orderId));
-  try {
-    await ctx.api.sendMessage(
-      chatId,
-      `✅ Pesanan ${o.orderCode} telah selesai. File sudah dikirim di atas.`,
-    );
-  } catch {
-    /* ignore */
-  }
   await ctx.answerCallbackQuery({ text: "✅ File terkirim ke pembeli" });
   await showAdminOrderDetail(ctx, orderId);
 }
 
 async function changeOrderStatus(ctx: AdminCtx, orderId: number, status: string) {
+  const before = await db
+    .select({ statusMessageId: ordersTable.statusMessageId })
+    .from(ordersTable)
+    .where(eq(ordersTable.id, orderId))
+    .limit(1);
+  const prevMsgId = before[0]?.statusMessageId ?? null;
+
   const updated = await db
     .update(ordersTable)
     .set({ status, updatedAt: new Date() })
@@ -334,11 +350,23 @@ async function changeOrderStatus(ctx: AdminCtx, orderId: number, status: string)
     .where(eq(customersTable.id, order.customerId))
     .limit(1);
   if (cust[0]) {
+    const chatId = Number(cust[0].telegramId);
+    if (prevMsgId) {
+      try {
+        await ctx.api.deleteMessage(chatId, prevMsgId);
+      } catch {
+        /* ignore */
+      }
+    }
     try {
-      await ctx.api.sendMessage(
-        Number(cust[0].telegramId),
+      const sent = await ctx.api.sendMessage(
+        chatId,
         `📦 Update Pesanan ${order.orderCode}\n\nStatus: ${statusLabel(order.status)}`,
       );
+      await db
+        .update(ordersTable)
+        .set({ statusMessageId: sent.message_id })
+        .where(eq(ordersTable.id, orderId));
     } catch (e) {
       logger.warn({ e }, "failed to notify customer from admin");
     }

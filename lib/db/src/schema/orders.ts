@@ -17,6 +17,7 @@ export const ordersTable = pgTable("orders", {
   deliveryCaption: text("delivery_caption"),
   deliveryUploadedAt: timestamp("delivery_uploaded_at", { withTimezone: true }),
   deliverySentAt: timestamp("delivery_sent_at", { withTimezone: true }),
+  statusMessageId: integer("status_message_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
