@@ -71,6 +71,7 @@ const productSchema = z.object({
   stock: z.coerce.number().min(0, "Stok tidak valid"),
   categoryId: z.coerce.number().nullable().optional(),
   imageUrl: z.string().url("URL gambar tidak valid").nullable().optional().or(z.literal("")),
+  digitalFileUrl: z.string().nullable().optional().or(z.literal("")),
   active: z.boolean().default(true),
 });
 
@@ -114,6 +115,7 @@ export default function ProdukPage() {
       stock: 0,
       categoryId: null,
       imageUrl: "",
+      digitalFileUrl: "",
       active: true,
     },
   });
@@ -127,6 +129,7 @@ export default function ProdukPage() {
       stock: 10,
       categoryId: null,
       imageUrl: "",
+      digitalFileUrl: "",
       active: true,
     });
     setIsSheetOpen(true);
@@ -141,6 +144,7 @@ export default function ProdukPage() {
       stock: product.stock,
       categoryId: product.categoryId || null,
       imageUrl: product.imageUrl || "",
+      digitalFileUrl: (product as any).digitalFileUrl || "",
       active: product.active,
     });
     setIsSheetOpen(true);
@@ -157,6 +161,7 @@ export default function ProdukPage() {
       ...data,
       categoryId: data.categoryId === 0 ? null : data.categoryId,
       imageUrl: data.imageUrl === "" ? null : data.imageUrl,
+      digitalFileUrl: data.digitalFileUrl === "" ? null : data.digitalFileUrl,
     };
 
     if (editingProduct) {
@@ -480,6 +485,27 @@ export default function ProdukPage() {
                       <Input placeholder="https://example.com/image.jpg" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormDescription>Link langsung ke gambar produk.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="digitalFileUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link File Produk Digital</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://drive.google.com/... atau https://..."
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Link unduhan (Google Drive, Dropbox, dll). Otomatis dikirim ke pembeli saat status pesanan diubah ke "Dikirim" atau "Selesai".
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

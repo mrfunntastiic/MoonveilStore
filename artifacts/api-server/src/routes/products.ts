@@ -12,6 +12,7 @@ const inputSchema = z.object({
   description: z.string().max(2000).default(""),
   priceCents: z.number().int().min(0),
   imageUrl: z.string().url().nullable().optional(),
+  digitalFileUrl: z.string().nullable().optional(),
   stock: z.number().int().min(0),
   active: z.boolean(),
 });
@@ -25,6 +26,7 @@ function row(r: any) {
     description: r.description,
     priceCents: r.priceCents,
     imageUrl: r.imageUrl,
+    digitalFileUrl: r.digitalFileUrl,
     stock: r.stock,
     active: r.active,
     createdAt: r.createdAt.toISOString(),
@@ -48,6 +50,7 @@ router.get("/products", async (req, res) => {
       description: productsTable.description,
       priceCents: productsTable.priceCents,
       imageUrl: productsTable.imageUrl,
+      digitalFileUrl: productsTable.digitalFileUrl,
       stock: productsTable.stock,
       active: productsTable.active,
       createdAt: productsTable.createdAt,
@@ -72,6 +75,7 @@ router.get("/products/:id", async (req, res) => {
       description: productsTable.description,
       priceCents: productsTable.priceCents,
       imageUrl: productsTable.imageUrl,
+      digitalFileUrl: productsTable.digitalFileUrl,
       stock: productsTable.stock,
       active: productsTable.active,
       createdAt: productsTable.createdAt,
@@ -101,6 +105,7 @@ router.post("/products", async (req, res) => {
       description: parsed.data.description,
       priceCents: parsed.data.priceCents,
       imageUrl: parsed.data.imageUrl ?? null,
+      digitalFileUrl: parsed.data.digitalFileUrl ?? null,
       stock: parsed.data.stock,
       active: parsed.data.active,
     })
@@ -129,6 +134,7 @@ router.patch("/products/:id", async (req, res) => {
       description: parsed.data.description,
       priceCents: parsed.data.priceCents,
       imageUrl: parsed.data.imageUrl ?? null,
+      digitalFileUrl: parsed.data.digitalFileUrl ?? null,
       stock: parsed.data.stock,
       active: parsed.data.active,
     })

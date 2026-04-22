@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { ordersTable, orderItemsTable, customersTable } from "@workspace/db/schema";
+import { ordersTable, orderItemsTable, customersTable, productsTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { getBot } from "../bot";
@@ -139,6 +139,32 @@ router.patch("/orders/:id", async (req, res) => {
       );
     } catch (e) {
       req.log.warn({ e }, "failed to notify customer");
+    }
+
+    // auto-deliver digital product file links when shipped/completed
+    if (parsed.data.status === "shipped" || parsed.data.status === "completed") {
+      try {
+        const itemsWithFiles = await db
+          .select({
+            name: productsTable.name,
+            digitalFileUrl: productsTable.digitalFileUrl,
+            quantity: orderItemsTable.quantity,
+          })
+          .from(orderItemsTable)
+          .innerJoin(productsTable, eq(orderItemsTable.productId, productsTable.id))
+          .where(eq(orderItemsTable.orderId, id));
+        const deliverables = itemsWithFiles.filter((i) => i.digitalFileUrl && i.digitalFileUrl.trim() !== "");
+        if (deliverables.length > 0) {
+          let msg = `🎁 *File Produk Digital - Pesanan ${order.orderCode}*\n\nTerima kasih sudah berbelanja! Berikut link unduhan produk Anda:\n\n`;
+          for (const d of deliverables) {
+            msg += `📁 *${d.name}*${d.quantity > 1 ? ` (x${d.quantity})` : ""}\n${d.digitalFileUrl}\n\n`;
+          }
+          msg += `Simpan link ini baik-baik. Jika ada kendala, balas pesan ini untuk hubungi admin.`;
+          await bot.api.sendMessage(Number(cust[0].telegramId), msg, { parse_mode: "Markdown" });
+        }
+      } catch (e) {
+        req.log.warn({ e }, "failed to deliver digital files");
+      }
     }
   }
 
