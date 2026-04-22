@@ -288,13 +288,16 @@ async function startCheckout(ctx: BotCtx) {
     return;
   }
   await clearNav(ctx);
-  ctx.session.step = "awaiting_phone";
+  ctx.session.step = "awaiting_payment_method";
   await ctx.answerCallbackQuery();
-  await sendNav(
-    ctx,
-    "📞 *Nomor WhatsApp / HP*\n\nKetik nomor yang bisa dihubungi untuk konfirmasi pembayaran dan pengiriman produk digital:",
-    { parse_mode: "MarkdownV2" },
-  );
+  await sendNav(ctx, "💳 Pilih metode pembayaran:", {
+    reply_markup: new InlineKeyboard()
+      .text("📱 QRIS", "pay:qris")
+      .row()
+      .text("🏦 Transfer Bank", "pay:transfer")
+      .row()
+      .text("💰 E-Wallet", "pay:ewallet"),
+  });
 }
 
 async function finishOrder(ctx: BotCtx, paymentMethod: string) {
@@ -551,20 +554,6 @@ export async function startTelegramBot(): Promise<void> {
   });
 
   bot.on("message:text", async (ctx) => {
-    if (ctx.session.step === "awaiting_phone") {
-      ctx.session.draftPhone = ctx.message.text.trim();
-      ctx.session.step = "awaiting_payment_method";
-      await clearNav(ctx);
-      await sendNav(ctx, "💳 Pilih metode pembayaran:", {
-        reply_markup: new InlineKeyboard()
-          .text("📱 QRIS", "pay:qris")
-          .row()
-          .text("🏦 Transfer Bank", "pay:transfer")
-          .row()
-          .text("💰 E-Wallet", "pay:ewallet"),
-      });
-      return;
-    }
     await ctx.reply("Gunakan menu di bawah atau ketik /menu untuk navigasi.", {
       reply_markup: mainMenu(),
     });
