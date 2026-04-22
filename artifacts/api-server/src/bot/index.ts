@@ -12,12 +12,12 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { formatRupiah, generateOrderCode, statusLabel } from "../lib/format";
 import { registerAdminHandlers, notifyNewOrder } from "./admin";
+import { clearNav, sendNav, sendNavPhoto, tryDeleteIncoming, type NavSession } from "./nav";
 
-interface SessionData {
+interface SessionData extends NavSession {
   step: "idle" | "awaiting_address" | "awaiting_phone" | "awaiting_payment_method";
   draftAddress?: string;
   draftPhone?: string;
-  productMessageIds: number[];
 }
 
 type BotCtx = Context & SessionFlavor<SessionData>;
@@ -90,17 +90,19 @@ function mainMenu() {
 }
 
 async function sendMainMenu(ctx: BotCtx, greet = true) {
+  await clearNav(ctx);
   const name = ctx.from?.first_name ?? "kak";
   const text = greet
     ? `Halo ${name}! 👋\n\nSelamat datang di toko kami. Pilih menu di bawah untuk mulai belanja:`
     : "Pilih menu:";
-  await ctx.reply(text, { reply_markup: mainMenu() });
+  await sendNav(ctx, text, { reply_markup: mainMenu() });
 }
 
 async function showCategories(ctx: BotCtx) {
+  await clearNav(ctx);
   const cats = await db.select().from(categoriesTable).orderBy(categoriesTable.name);
   if (cats.length === 0) {
-    await ctx.reply("Belum ada kategori produk. Silakan kembali nanti ya!", {
+    await sendNav(ctx, "Belum ada kategori produk. Silakan kembali nanti ya!", {
       reply_markup: new InlineKeyboard().text("« Menu Utama", "menu"),
     });
     return;
@@ -112,23 +114,11 @@ async function showCategories(ctx: BotCtx) {
   }
   kb.text("📋 Semua Produk", "cat:all").row();
   kb.text("« Menu Utama", "menu");
-  await ctx.reply("Pilih kategori:", { reply_markup: kb });
-}
-
-async function clearProductMessages(ctx: BotCtx) {
-  const ids = ctx.session.productMessageIds ?? [];
-  for (const id of ids) {
-    try {
-      await ctx.api.deleteMessage(ctx.chat!.id, id);
-    } catch (e) {
-      logger.debug({ e, id }, "failed to delete product message");
-    }
-  }
-  ctx.session.productMessageIds = [];
+  await sendNav(ctx, "Pilih kategori:", { reply_markup: kb });
 }
 
 async function showProducts(ctx: BotCtx, categoryId: number | "all") {
-  await clearProductMessages(ctx);
+  await clearNav(ctx);
   const where =
     categoryId === "all"
       ? eq(productsTable.active, true)
@@ -140,14 +130,12 @@ async function showProducts(ctx: BotCtx, categoryId: number | "all") {
     .orderBy(desc(productsTable.createdAt))
     .limit(20);
   if (items.length === 0) {
-    const m = await ctx.reply("Belum ada produk di kategori ini.", {
+    await sendNav(ctx, "Belum ada produk di kategori ini.", {
       reply_markup: new InlineKeyboard().text("« Kategori", "catalog"),
     });
-    ctx.session.productMessageIds.push(m.message_id);
     return;
   }
-  const header = await ctx.reply(`Menampilkan ${items.length} produk:`);
-  ctx.session.productMessageIds.push(header.message_id);
+  await sendNav(ctx, `Menampilkan ${items.length} produk:`);
   for (const p of items) {
     const stockLine = p.stock > 0 ? `Stok: ${p.stock}` : "⚠️ Stok habis";
     const caption = `*${escapeMd(p.name)}*\n${escapeMd(p.description || "")}\n\n💰 ${escapeMd(
@@ -157,29 +145,25 @@ async function showProducts(ctx: BotCtx, categoryId: number | "all") {
     if (p.stock > 0) {
       kb.text("➕ Tambah ke Keranjang", `add:${p.id}`);
     }
-    let sent;
     if (p.imageUrl) {
       try {
-        sent = await ctx.replyWithPhoto(p.imageUrl, {
+        await sendNavPhoto(ctx, p.imageUrl, {
           caption,
           parse_mode: "MarkdownV2",
           reply_markup: kb,
         });
-        ctx.session.productMessageIds.push(sent.message_id);
         continue;
       } catch (e) {
         logger.warn({ e, productId: p.id }, "failed to send photo, falling back to text");
       }
     }
-    sent = await ctx.reply(caption, { parse_mode: "MarkdownV2", reply_markup: kb });
-    ctx.session.productMessageIds.push(sent.message_id);
+    await sendNav(ctx, caption, { parse_mode: "MarkdownV2", reply_markup: kb });
   }
-  const footer = await ctx.reply("Pilih lagi atau kembali:", {
+  await sendNav(ctx, "Pilih lagi atau kembali:", {
     reply_markup: new InlineKeyboard()
       .text("« Kategori", "catalog")
       .text("🛒 Keranjang", "cart"),
   });
-  ctx.session.productMessageIds.push(footer.message_id);
 }
 
 function escapeMd(s: string): string {
@@ -219,6 +203,7 @@ async function addToCart(ctx: BotCtx, productId: number) {
 }
 
 async function showCart(ctx: BotCtx) {
+  await clearNav(ctx);
   const cust = await ensureCustomer(ctx);
   if (!cust) return;
   const items = await db
@@ -234,7 +219,7 @@ async function showCart(ctx: BotCtx) {
     .innerJoin(productsTable, eq(cartItemsTable.productId, productsTable.id))
     .where(eq(cartItemsTable.customerId, cust.id));
   if (items.length === 0) {
-    await ctx.reply("🛒 Keranjang kamu kosong.\n\nYuk lihat katalog dulu!", {
+    await sendNav(ctx, "🛒 Keranjang kamu kosong.\n\nYuk lihat katalog dulu!", {
       reply_markup: new InlineKeyboard().text("🛍️ Katalog", "catalog").text("« Menu", "menu"),
     });
     return;
@@ -256,7 +241,7 @@ async function showCart(ctx: BotCtx) {
   }
   kb.text("✅ Checkout", "checkout").row();
   kb.text("🛍️ Lanjut Belanja", "catalog").text("« Menu", "menu");
-  await ctx.reply(text, { parse_mode: "MarkdownV2", reply_markup: kb });
+  await sendNav(ctx, text, { parse_mode: "MarkdownV2", reply_markup: kb });
 }
 
 async function modifyCartItem(ctx: BotCtx, cartId: number, action: "inc" | "dec" | "rm") {
@@ -287,11 +272,6 @@ async function modifyCartItem(ctx: BotCtx, cartId: number, action: "inc" | "dec"
     }
     await ctx.answerCallbackQuery({ text: "-1" });
   }
-  if (ctx.callbackQuery?.message) {
-    try {
-      await ctx.deleteMessage();
-    } catch {}
-  }
   await showCart(ctx);
 }
 
@@ -306,9 +286,11 @@ async function startCheckout(ctx: BotCtx) {
     await ctx.answerCallbackQuery({ text: "Keranjang kosong", show_alert: true });
     return;
   }
+  await clearNav(ctx);
   ctx.session.step = "awaiting_address";
   await ctx.answerCallbackQuery();
-  await ctx.reply(
+  await sendNav(
+    ctx,
     "📍 *Alamat Pengiriman*\n\nKetik alamat lengkap pengiriman \\(nama jalan, kota, kode pos\\):",
     { parse_mode: "MarkdownV2" },
   );
@@ -384,12 +366,14 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
   ctx.session.draftAddress = undefined;
   ctx.session.draftPhone = undefined;
 
+  await clearNav(ctx);
   let summary = `✅ *Pesanan Dibuat*\n\n`;
   summary += `Kode: \`${escapeMd(code)}\`\n`;
   summary += `Total: *${escapeMd(formatRupiah(total))}*\n`;
   summary += `Pembayaran: ${escapeMd(paymentMethod)}\n`;
   summary += `Status: ${escapeMd(statusLabel("pending"))}\n\n`;
   summary += `Admin akan menghubungi kamu untuk konfirmasi pembayaran\\. Terima kasih sudah belanja\\! 🙏`;
+  // INVOICE: not tracked in nav, stays permanently in chat
   await ctx.reply(summary, {
     parse_mode: "MarkdownV2",
     reply_markup: new InlineKeyboard().text("📦 Pesanan Saya", "orders").text("« Menu", "menu"),
@@ -403,6 +387,7 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
 }
 
 async function showOrders(ctx: BotCtx) {
+  await clearNav(ctx);
   const cust = await ensureCustomer(ctx);
   if (!cust) return;
   const orders = await db
@@ -412,7 +397,7 @@ async function showOrders(ctx: BotCtx) {
     .orderBy(desc(ordersTable.createdAt))
     .limit(10);
   if (orders.length === 0) {
-    await ctx.reply("Kamu belum punya pesanan.", {
+    await sendNav(ctx, "Kamu belum punya pesanan.", {
       reply_markup: new InlineKeyboard().text("🛍️ Belanja Sekarang", "catalog").text("« Menu", "menu"),
     });
     return;
@@ -423,7 +408,7 @@ async function showOrders(ctx: BotCtx) {
     text += `${escapeMd(statusLabel(o.status))} \\- ${escapeMd(formatRupiah(o.totalCents))}\n`;
     text += `${escapeMd(o.createdAt.toLocaleDateString("id-ID"))}\n\n`;
   }
-  await ctx.reply(text, {
+  await sendNav(ctx, text, {
     parse_mode: "MarkdownV2",
     reply_markup: new InlineKeyboard().text("« Menu Utama", "menu"),
   });
@@ -441,7 +426,7 @@ export async function startTelegramBot(): Promise<void> {
 
   bot.use(
     session({
-      initial: (): SessionData => ({ step: "idle", productMessageIds: [] }),
+      initial: (): SessionData => ({ step: "idle", navMessageIds: [] }),
     }),
   );
 

@@ -9,10 +9,10 @@ import {
 import { eq, desc, sql, and, gte, lte, lt } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { formatRupiah, statusLabel } from "../lib/format";
+import { clearNav, sendNav, type NavSession } from "./nav";
 
-interface AdminSessionShape {
+interface AdminSessionShape extends NavSession {
   step: string;
-  productMessageIds: number[];
 }
 
 type AdminCtx = Context & SessionFlavor<AdminSessionShape>;
@@ -75,7 +75,7 @@ async function sendAdminMenu(ctx: AdminCtx) {
     `🛠️ *Panel Admin*\n\n` +
     `Pesanan menunggu: *${pendingCount[0]?.c ?? 0}*\n\n` +
     `Pilih menu:`;
-  await ctx.reply(text, { parse_mode: "MarkdownV2", reply_markup: adminMenu() });
+  await sendNav(ctx, text, { parse_mode: "MarkdownV2", reply_markup: adminMenu() });
 }
 
 async function listOrdersByStatus(ctx: AdminCtx, status: string) {
@@ -95,7 +95,7 @@ async function listOrdersByStatus(ctx: AdminCtx, status: string) {
     .orderBy(desc(ordersTable.createdAt))
     .limit(15);
   if (rows.length === 0) {
-    await ctx.reply(`Tidak ada pesanan dengan status: ${statusLabel(status)}`, {
+    await sendNav(ctx, `Tidak ada pesanan dengan status: ${statusLabel(status)}`, {
       reply_markup: new InlineKeyboard().text("« Menu Admin", "adm:menu"),
     });
     return;
@@ -108,7 +108,7 @@ async function listOrdersByStatus(ctx: AdminCtx, status: string) {
     kb.text(`${o.orderCode} • ${formatRupiah(o.totalCents)}`, `adm:o:${o.id}`).row();
   }
   kb.text("« Menu Admin", "adm:menu");
-  await ctx.reply(text, { parse_mode: "MarkdownV2", reply_markup: kb });
+  await sendNav(ctx, text, { parse_mode: "MarkdownV2", reply_markup: kb });
 }
 
 async function showAdminOrderDetail(ctx: AdminCtx, orderId: number) {
@@ -132,7 +132,7 @@ async function showAdminOrderDetail(ctx: AdminCtx, orderId: number) {
     .where(eq(ordersTable.id, orderId))
     .limit(1);
   if (rows.length === 0) {
-    await ctx.reply("Pesanan tidak ditemukan.");
+    await sendNav(ctx, "Pesanan tidak ditemukan.");
     return;
   }
   const o = rows[0]!;
@@ -163,7 +163,7 @@ async function showAdminOrderDetail(ctx: AdminCtx, orderId: number) {
     kb.text("❌ Batalkan", `adm:s:${o.id}:cancelled`).row();
   }
   kb.text("« Kembali", "adm:menu");
-  await ctx.reply(text, { parse_mode: "MarkdownV2", reply_markup: kb });
+  await sendNav(ctx, text, { parse_mode: "MarkdownV2", reply_markup: kb });
 }
 
 async function changeOrderStatus(ctx: AdminCtx, orderId: number, status: string) {
@@ -227,7 +227,7 @@ async function showTodayReport(ctx: AdminCtx) {
       text += `${escapeMd(statusLabel(r.status))}: ${r.count} \\(${escapeMd(formatRupiah(r.total))}\\)\n`;
     }
   }
-  await ctx.reply(text, {
+  await sendNav(ctx, text, {
     parse_mode: "MarkdownV2",
     reply_markup: new InlineKeyboard().text("« Menu Admin", "adm:menu"),
   });
@@ -241,7 +241,7 @@ async function showLowStock(ctx: AdminCtx) {
     .orderBy(productsTable.stock)
     .limit(20);
   if (rows.length === 0) {
-    await ctx.reply("✅ Semua stok aman \\(\\>5\\)\\.", {
+    await sendNav(ctx, "✅ Semua stok aman \\(\\>5\\)\\.", {
       parse_mode: "MarkdownV2",
       reply_markup: new InlineKeyboard().text("« Menu Admin", "adm:menu"),
     });
@@ -252,7 +252,7 @@ async function showLowStock(ctx: AdminCtx) {
     const flag = p.stock === 0 ? "⛔" : "⚠️";
     text += `${flag} ${escapeMd(p.name)}: *${p.stock}*\n`;
   }
-  await ctx.reply(text, {
+  await sendNav(ctx, text, {
     parse_mode: "MarkdownV2",
     reply_markup: new InlineKeyboard().text("« Menu Admin", "adm:menu"),
   });
@@ -316,6 +316,7 @@ export function registerAdminHandlers(bot: Bot<AdminCtx>): void {
       await ctx.reply("Maaf, perintah ini khusus admin.");
       return;
     }
+    await clearNav(ctx);
     await sendAdminMenu(ctx);
   });
 
