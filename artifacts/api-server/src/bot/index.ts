@@ -294,9 +294,7 @@ async function startCheckout(ctx: BotCtx) {
     reply_markup: new InlineKeyboard()
       .text("📱 QRIS", "pay:qris")
       .row()
-      .text("🏦 Transfer Bank", "pay:transfer")
-      .row()
-      .text("💰 E-Wallet", "pay:ewallet"),
+      .text("🏦 Transfer Bank / E-Wallet", "pay:transfer"),
   });
 }
 
@@ -523,11 +521,20 @@ export async function startTelegramBot(): Promise<void> {
     await ctx.answerCallbackQuery();
     const labels: Record<string, string> = {
       qris: "QRIS",
-      transfer: "Transfer Bank",
-      ewallet: "E-Wallet",
+      transfer: "Transfer / E-Wallet",
     };
     const label = labels[method] ?? method;
     await finishOrder(ctx, label);
+    if (method === "transfer") {
+      const info =
+        "🏦 *Transfer Bank / E\\-Wallet*\n\n" +
+        "Silakan transfer ke salah satu rekening berikut:\n\n" +
+        "*BCA*\n`238 141 3499`\na/n UUN HARYANTO\n\n" +
+        "*BRI*\n`0302 0107 5020 504`\na/n UUN HARYANTO\n\n" +
+        "*DANA*\n`0852 9011 5868`\na/n UUN HARYANTO\n\n" +
+        "Setelah bayar, kirim *bukti transfer* \\(foto/screenshot\\) ke chat ini\\. Produk akan dikirim setelah pembayaran terkonfirmasi admin\\.";
+      await ctx.reply(info, { parse_mode: "MarkdownV2" });
+    }
     if (method === "qris") {
       const qrisCaption =
         "📱 *Pembayaran QRIS \\- Moonveil Creations*\n\n" +
