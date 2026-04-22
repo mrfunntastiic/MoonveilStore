@@ -15,8 +15,7 @@ import { registerAdminHandlers, notifyNewOrder } from "./admin";
 import { clearNav, sendNav, sendNavPhoto, tryDeleteIncoming, type NavSession } from "./nav";
 
 interface SessionData extends NavSession {
-  step: "idle" | "awaiting_address" | "awaiting_phone" | "awaiting_payment_method";
-  draftAddress?: string;
+  step: "idle" | "awaiting_phone" | "awaiting_payment_method";
   draftPhone?: string;
 }
 
@@ -287,11 +286,11 @@ async function startCheckout(ctx: BotCtx) {
     return;
   }
   await clearNav(ctx);
-  ctx.session.step = "awaiting_address";
+  ctx.session.step = "awaiting_phone";
   await ctx.answerCallbackQuery();
   await sendNav(
     ctx,
-    "📍 *Alamat Pengiriman*\n\nKetik alamat lengkap pengiriman \\(nama jalan, kota, kode pos\\):",
+    "📞 *Nomor WhatsApp / HP*\n\nKetik nomor yang bisa dihubungi untuk konfirmasi pembayaran dan pengiriman produk digital:",
     { parse_mode: "MarkdownV2" },
   );
 }
@@ -324,11 +323,10 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
   }
   const total = items.reduce((s, it) => s + it.priceCents * it.quantity, 0);
   const code = generateOrderCode();
-  const address = ctx.session.draftAddress ?? "";
   const phone = ctx.session.draftPhone ?? "";
 
   if (phone) {
-    await db.update(customersTable).set({ phone, shippingAddress: address }).where(eq(customersTable.id, cust.id));
+    await db.update(customersTable).set({ phone }).where(eq(customersTable.id, cust.id));
   }
 
   const inserted = await db
@@ -338,9 +336,9 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
       customerId: cust.id,
       status: "pending",
       totalCents: total,
-      shippingAddress: address,
+      shippingAddress: "Produk Digital",
       paymentMethod,
-      notes: phone ? `Telp: ${phone}` : null,
+      notes: phone ? `Kontak: ${phone}` : null,
     })
     .returning();
   const order = inserted[0]!;
@@ -363,7 +361,6 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
   await db.delete(cartItemsTable).where(eq(cartItemsTable.customerId, cust.id));
 
   ctx.session.step = "idle";
-  ctx.session.draftAddress = undefined;
   ctx.session.draftPhone = undefined;
 
   await clearNav(ctx);
@@ -520,30 +517,45 @@ export async function startTelegramBot(): Promise<void> {
     const method = ctx.match![1]!;
     await ctx.answerCallbackQuery();
     const labels: Record<string, string> = {
+      qris: "QRIS",
       transfer: "Transfer Bank",
-      cod: "COD (Bayar di Tempat)",
       ewallet: "E-Wallet",
     };
-    await finishOrder(ctx, labels[method] ?? method);
+    const label = labels[method] ?? method;
+    await finishOrder(ctx, label);
+    if (method === "qris") {
+      const qrisImage = process.env["QRIS_IMAGE_URL"];
+      const qrisCaption =
+        "📱 *Pembayaran QRIS*\n\n" +
+        "Scan QR di atas dengan aplikasi e\\-wallet \\(GoPay, OVO, Dana, ShopeePay, dll\\) atau mobile banking\\.\n\n" +
+        "Setelah bayar, kirim bukti transfer ke admin\\. Produk akan dikirim setelah pembayaran terkonfirmasi\\.";
+      if (qrisImage) {
+        try {
+          await ctx.replyWithPhoto(qrisImage, { caption: qrisCaption, parse_mode: "MarkdownV2" });
+        } catch {
+          await ctx.reply(qrisCaption, { parse_mode: "MarkdownV2" });
+        }
+      } else {
+        await ctx.reply(
+          "📱 *Pembayaran QRIS*\n\nAdmin akan mengirimkan QR code QRIS untuk pembayaran\\. Mohon tunggu\\.",
+          { parse_mode: "MarkdownV2" },
+        );
+      }
+    }
   });
 
   bot.on("message:text", async (ctx) => {
-    if (ctx.session.step === "awaiting_address") {
-      ctx.session.draftAddress = ctx.message.text.trim();
-      ctx.session.step = "awaiting_phone";
-      await ctx.reply("📞 Sekarang kirim nomor HP yang bisa dihubungi:");
-      return;
-    }
     if (ctx.session.step === "awaiting_phone") {
       ctx.session.draftPhone = ctx.message.text.trim();
       ctx.session.step = "awaiting_payment_method";
-      await ctx.reply("💳 Pilih metode pembayaran:", {
+      await clearNav(ctx);
+      await sendNav(ctx, "💳 Pilih metode pembayaran:", {
         reply_markup: new InlineKeyboard()
+          .text("📱 QRIS", "pay:qris")
+          .row()
           .text("🏦 Transfer Bank", "pay:transfer")
           .row()
-          .text("💵 COD", "pay:cod")
-          .row()
-          .text("📱 E-Wallet", "pay:ewallet"),
+          .text("💰 E-Wallet", "pay:ewallet"),
       });
       return;
     }
