@@ -11,6 +11,12 @@ export const ordersTable = pgTable("orders", {
   shippingAddress: text("shipping_address"),
   paymentMethod: text("payment_method"),
   notes: text("notes"),
+  deliveryFileId: text("delivery_file_id"),
+  deliveryFileType: text("delivery_file_type"),
+  deliveryFileName: text("delivery_file_name"),
+  deliveryCaption: text("delivery_caption"),
+  deliveryUploadedAt: timestamp("delivery_uploaded_at", { withTimezone: true }),
+  deliverySentAt: timestamp("delivery_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

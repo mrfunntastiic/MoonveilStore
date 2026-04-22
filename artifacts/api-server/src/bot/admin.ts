@@ -13,6 +13,8 @@ import { clearNav, sendNav, type NavSession } from "./nav";
 
 interface AdminSessionShape extends NavSession {
   step: string;
+  awaitingFileForOrderId?: number;
+  draftPhone?: string;
 }
 
 type AdminCtx = Context & SessionFlavor<AdminSessionShape>;
@@ -122,6 +124,10 @@ async function showAdminOrderDetail(ctx: AdminCtx, orderId: number) {
       paymentMethod: ordersTable.paymentMethod,
       notes: ordersTable.notes,
       createdAt: ordersTable.createdAt,
+      deliveryFileId: ordersTable.deliveryFileId,
+      deliveryFileType: ordersTable.deliveryFileType,
+      deliveryFileName: ordersTable.deliveryFileName,
+      deliverySentAt: ordersTable.deliverySentAt,
       firstName: customersTable.firstName,
       lastName: customersTable.lastName,
       username: customersTable.username,
@@ -154,16 +160,161 @@ async function showAdminOrderDetail(ctx: AdminCtx, orderId: number) {
   }
   if (o.notes) text += `\n_${escapeMd(o.notes)}_`;
 
+  text += `\n\n*File Pengiriman:*\n`;
+  if (o.deliveryFileId) {
+    const fname = o.deliveryFileName ?? o.deliveryFileType ?? "file";
+    text += `📎 ${escapeMd(fname)}`;
+    if (o.deliverySentAt) {
+      text += ` \\(✅ sudah dikirim ke pembeli\\)`;
+    } else {
+      text += ` \\(belum dikirim\\)`;
+    }
+  } else {
+    text += `_belum ada file_`;
+  }
+
   const kb = new InlineKeyboard();
   const flow = STATUS_FLOW[o.status];
   if (flow?.next) {
     kb.text(`✅ ${flow.label}`, `adm:s:${o.id}:${flow.next}`).row();
+  }
+  if (o.status !== "cancelled") {
+    if (o.deliveryFileId) {
+      kb.text("📎 Ganti File", `adm:upl:${o.id}`).row();
+      if (!o.deliverySentAt) {
+        kb.text("📤 Kirim File ke Pembeli", `adm:snd:${o.id}`).row();
+      } else {
+        kb.text("🔁 Kirim Ulang File", `adm:snd:${o.id}`).row();
+      }
+    } else {
+      kb.text("📎 Upload File Pengiriman", `adm:upl:${o.id}`).row();
+    }
   }
   if (o.status !== "completed" && o.status !== "cancelled") {
     kb.text("❌ Batalkan", `adm:s:${o.id}:cancelled`).row();
   }
   kb.text("« Kembali", "adm:menu");
   await sendNav(ctx, text, { parse_mode: "MarkdownV2", reply_markup: kb });
+}
+
+async function promptUploadFile(ctx: AdminCtx, orderId: number) {
+  const rows = await db
+    .select({ id: ordersTable.id, orderCode: ordersTable.orderCode })
+    .from(ordersTable)
+    .where(eq(ordersTable.id, orderId))
+    .limit(1);
+  if (rows.length === 0) {
+    await ctx.answerCallbackQuery({ text: "Pesanan tidak ditemukan", show_alert: true });
+    return;
+  }
+  ctx.session.awaitingFileForOrderId = orderId;
+  ctx.session.step = "awaiting_delivery_file";
+  await ctx.answerCallbackQuery();
+  await sendNav(
+    ctx,
+    `📎 Kirim file untuk pesanan *${escapeMd(rows[0]!.orderCode)}*\\.\n\nKirim sebagai *Document*, foto, atau video\\. Caption \\(opsional\\) akan ikut dikirim ke pembeli\\.\n\nAtau ketik /batal untuk membatalkan\\.`,
+    {
+      parse_mode: "MarkdownV2",
+      reply_markup: new InlineKeyboard().text("« Batal", `adm:o:${orderId}`),
+    },
+  );
+}
+
+async function saveDeliveryFile(
+  ctx: AdminCtx,
+  orderId: number,
+  fileId: string,
+  fileType: "document" | "photo" | "video",
+  fileName: string | null,
+  caption: string | null,
+) {
+  await db
+    .update(ordersTable)
+    .set({
+      deliveryFileId: fileId,
+      deliveryFileType: fileType,
+      deliveryFileName: fileName,
+      deliveryCaption: caption,
+      deliveryUploadedAt: new Date(),
+      deliverySentAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(ordersTable.id, orderId));
+  ctx.session.awaitingFileForOrderId = undefined;
+  ctx.session.step = "idle";
+  await ctx.reply(
+    `✅ File tersimpan untuk pesanan ini\\. Tekan *Kirim File ke Pembeli* untuk mengirim\\.`,
+    { parse_mode: "MarkdownV2" },
+  );
+  await showAdminOrderDetail(ctx, orderId);
+}
+
+async function sendDeliveryFile(ctx: AdminCtx, orderId: number) {
+  const rows = await db
+    .select({
+      id: ordersTable.id,
+      orderCode: ordersTable.orderCode,
+      status: ordersTable.status,
+      customerId: ordersTable.customerId,
+      deliveryFileId: ordersTable.deliveryFileId,
+      deliveryFileType: ordersTable.deliveryFileType,
+      deliveryFileName: ordersTable.deliveryFileName,
+      deliveryCaption: ordersTable.deliveryCaption,
+    })
+    .from(ordersTable)
+    .where(eq(ordersTable.id, orderId))
+    .limit(1);
+  if (rows.length === 0) {
+    await ctx.answerCallbackQuery({ text: "Pesanan tidak ditemukan", show_alert: true });
+    return;
+  }
+  const o = rows[0]!;
+  if (!o.deliveryFileId || !o.deliveryFileType) {
+    await ctx.answerCallbackQuery({ text: "Belum ada file. Upload dulu.", show_alert: true });
+    return;
+  }
+  const cust = await db
+    .select()
+    .from(customersTable)
+    .where(eq(customersTable.id, o.customerId))
+    .limit(1);
+  if (cust.length === 0) {
+    await ctx.answerCallbackQuery({ text: "Pelanggan tidak ditemukan", show_alert: true });
+    return;
+  }
+  const chatId = Number(cust[0]!.telegramId);
+  const caption =
+    `📦 Pesanan ${o.orderCode}\n\n` +
+    `Berikut file pesanan kamu. Terima kasih sudah belanja!` +
+    (o.deliveryCaption ? `\n\n${o.deliveryCaption}` : "");
+  try {
+    if (o.deliveryFileType === "document") {
+      await ctx.api.sendDocument(chatId, o.deliveryFileId, { caption });
+    } else if (o.deliveryFileType === "photo") {
+      await ctx.api.sendPhoto(chatId, o.deliveryFileId, { caption });
+    } else if (o.deliveryFileType === "video") {
+      await ctx.api.sendVideo(chatId, o.deliveryFileId, { caption });
+    }
+  } catch (e) {
+    logger.warn({ e, orderId }, "failed to send delivery file to customer");
+    await ctx.answerCallbackQuery({ text: "Gagal mengirim file ke pembeli", show_alert: true });
+    return;
+  }
+  const newStatus = o.status === "cancelled" ? o.status : "completed";
+  await db
+    .update(ordersTable)
+    .set({ deliverySentAt: new Date(), status: newStatus, updatedAt: new Date() })
+    .where(eq(ordersTable.id, orderId));
+  try {
+    await ctx.api.sendMessage(
+      chatId,
+      `✅ Pesanan ${o.orderCode} telah selesai. File sudah dikirim di atas.`,
+    );
+  } catch {
+    /* ignore */
+  }
+  await ctx.answerCallbackQuery({ text: "✅ File terkirim ke pembeli" });
+  await showAdminOrderDetail(ctx, orderId);
 }
 
 async function changeOrderStatus(ctx: AdminCtx, orderId: number, status: string) {
@@ -357,6 +508,52 @@ export function registerAdminHandlers(bot: Bot<AdminCtx>): void {
       await changeOrderStatus(ctx, Number(statusMatch[1]), statusMatch[2]!);
       return;
     }
+    const uplMatch = action.match(/^upl:(\d+)$/);
+    if (uplMatch) {
+      await promptUploadFile(ctx, Number(uplMatch[1]));
+      return;
+    }
+    const sndMatch = action.match(/^snd:(\d+)$/);
+    if (sndMatch) {
+      await sendDeliveryFile(ctx, Number(sndMatch[1]));
+      return;
+    }
     await ctx.answerCallbackQuery();
+  });
+
+  bot.command("batal", async (ctx) => {
+    if (!isAdmin(ctx.from?.id)) return;
+    if (ctx.session.awaitingFileForOrderId) {
+      const oid = ctx.session.awaitingFileForOrderId;
+      ctx.session.awaitingFileForOrderId = undefined;
+      ctx.session.step = "idle";
+      await ctx.reply("Upload dibatalkan.");
+      await showAdminOrderDetail(ctx, oid);
+    } else {
+      await ctx.reply("Tidak ada upload yang sedang berjalan.");
+    }
+  });
+
+  bot.on(["message:document", "message:photo", "message:video"], async (ctx, next) => {
+    if (!isAdmin(ctx.from?.id)) {
+      await next();
+      return;
+    }
+    const orderId = ctx.session.awaitingFileForOrderId;
+    if (!orderId) {
+      await next();
+      return;
+    }
+    const caption = ctx.message?.caption ?? null;
+    if (ctx.message?.document) {
+      const d = ctx.message.document;
+      await saveDeliveryFile(ctx, orderId, d.file_id, "document", d.file_name ?? null, caption);
+    } else if (ctx.message?.photo && ctx.message.photo.length > 0) {
+      const largest = ctx.message.photo[ctx.message.photo.length - 1]!;
+      await saveDeliveryFile(ctx, orderId, largest.file_id, "photo", null, caption);
+    } else if (ctx.message?.video) {
+      const v = ctx.message.video;
+      await saveDeliveryFile(ctx, orderId, v.file_id, "video", v.file_name ?? null, caption);
+    }
   });
 }
