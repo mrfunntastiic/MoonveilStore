@@ -1,0 +1,49 @@
+ubuntu@VM-0-8-ubuntu:~/toko$ set -a && source .env && set +a
+pnpm --filter @workspace/db push
+pnpm --filter @workspace/api-server build
+pnpm --filter @workspace/admin build
+
+> @workspace/db@0.0.0 push /home/ubuntu/toko/lib/db
+> drizzle-kit push --config ./drizzle.config.ts
+
+Reading config file '/home/ubuntu/toko/lib/db/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+[✓] Changes applied
+
+> @workspace/api-server@0.0.0 build /home/ubuntu/toko/artifacts/api-server
+> node ./build.mjs
+
+
+  dist/index.mjs                       2.2mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.0kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                   3.8mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 303ms
+
+> @workspace/admin@0.0.0 build /home/ubuntu/toko/artifacts/admin
+> vite build --config vite.config.ts
+
+failed to load config from /home/ubuntu/toko/artifacts/admin/vite.config.ts
+error during build:
+Error: BASE_PATH environment variable is required but was not provided.
+    at file:///home/ubuntu/toko/artifacts/admin/node_modules/.vite-temp/vite.config.ts.timestamp-1776842332343-5d079892a277a.mjs:20:9
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async loadConfigFromBundledFile (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35920:12)
+    at async bundleAndLoadConfigFile (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35808:17)
+    at async loadConfigFromFile (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35775:42)
+    at async resolveConfig (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35424:22)
+    at async createBuilder (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:33879:19)
+    at async CAC.<anonymous> (file:///home/ubuntu/toko/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/cli.js:629:10)
+/home/ubuntu/toko/artifacts/admin:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/admin@0.0.0 build: `vite build --config vite.config.ts`
+Exit status 1
+ubuntu@VM-0-8-ubuntu:~/toko$
