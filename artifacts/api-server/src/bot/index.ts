@@ -11,6 +11,7 @@ import {
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { formatRupiah, generateOrderCode, statusLabel } from "../lib/format";
+import { registerAdminHandlers, notifyNewOrder } from "./admin";
 
 interface SessionData {
   step: "idle" | "awaiting_address" | "awaiting_phone" | "awaiting_payment_method";
@@ -393,6 +394,12 @@ async function finishOrder(ctx: BotCtx, paymentMethod: string) {
     parse_mode: "MarkdownV2",
     reply_markup: new InlineKeyboard().text("📦 Pesanan Saya", "orders").text("« Menu", "menu"),
   });
+
+  try {
+    await notifyNewOrder(botInstance!, order.id);
+  } catch (e) {
+    logger.warn({ e }, "failed to notify admin of new order");
+  }
 }
 
 async function showOrders(ctx: BotCtx) {
@@ -437,6 +444,8 @@ export async function startTelegramBot(): Promise<void> {
       initial: (): SessionData => ({ step: "idle", productMessageIds: [] }),
     }),
   );
+
+  registerAdminHandlers(bot);
 
   bot.command("start", async (ctx) => {
     await ensureCustomer(ctx);
